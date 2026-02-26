@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import acsLogo from './assets/acs-logo.png';
 
-const API_BASE = process.env.REACT_APP_API_BASE || 'https://server-lake-mu.vercel.app';
+const API_BASE = process.env.REACT_APP_API_BASE || 'https://server-nine-olive-75.vercel.app';
 
 const STAGES = ['New', 'Qualified', 'Meeting Booked', 'Proposal Sent', 'Won', 'Lost'];
 
