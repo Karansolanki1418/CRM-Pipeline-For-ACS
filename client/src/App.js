@@ -32,7 +32,8 @@ function useAuth() {
 async function apiFetch(path, { method = 'GET', body, token, publicRoute = false } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (!publicRoute && token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, {
+  const apiPath = path.startsWith('/api') ? path : `/api${path}`;
+  const res = await fetch(`${API_BASE}${apiPath}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
