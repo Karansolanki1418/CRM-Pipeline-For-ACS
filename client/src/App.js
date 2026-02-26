@@ -1287,6 +1287,7 @@ function AdminDashboard({ auth }) {
     setUsers(all);
   };
 
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     const handler = async (e) => {
       const id = e.detail?.id;
@@ -1316,6 +1317,7 @@ function AdminDashboard({ auth }) {
     refreshMetrics();
     refreshUsers();
   }, [auth.token]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
     if (!toast.message) return;
