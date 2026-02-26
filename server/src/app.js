@@ -24,6 +24,10 @@ app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 app.use(morgan("dev"));
 
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 app.use(async (req, res, next) => {
   try {
     await connectDB();
@@ -37,10 +41,6 @@ app.use(async (req, res, next) => {
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 200,
-});
-
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 app.use("/api", apiLimiter);
