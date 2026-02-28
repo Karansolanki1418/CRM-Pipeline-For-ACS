@@ -1,0 +1,860 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "ACS Energy CRM API",
+        "description": "Lead cockpit for EV rollouts — CHS, Hotels, Corporate Parks, and Developers across MMR.",
+        "version": "1.0.0",
+        "contact": {
+            "name": "ACS Energy"
+        }
+    },
+    "servers": [
+        {
+            "url": "https://server-nine-olive-75.vercel.app",
+            "description": "Production"
+        },
+        {
+            "url": "http://localhost:5000",
+            "description": "Local development"
+        }
+    ],
+    "components": {
+        "securitySchemes": {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
+            }
+        },
+        "schemas": {
+            "Lead": {
+                "type": "object",
+                "properties": {
+                    "_id": {
+                        "type": "string"
+                    },
+                    "leadId": {
+                        "type": "string",
+                        "example": "ACS-288836-d37a"
+                    },
+                    "leadType": {
+                        "type": "string",
+                        "enum": [
+                            "CHS",
+                            "Hotel",
+                            "Corporate",
+                            "Developer",
+                            "Other"
+                        ]
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "phone": {
+                        "type": "string"
+                    },
+                    "email": {
+                        "type": "string"
+                    },
+                    "area": {
+                        "type": "string"
+                    },
+                    "locality": {
+                        "type": "string"
+                    },
+                    "propertySizeFlats": {
+                        "type": "number"
+                    },
+                    "parkingType": {
+                        "type": "string",
+                        "enum": [
+                            "open",
+                            "basement",
+                            "mixed"
+                        ]
+                    },
+                    "currentEvCount": {
+                        "type": "number"
+                    },
+                    "chargerInterest": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "notes": {
+                        "type": "string"
+                    },
+                    "consent": {
+                        "type": "boolean"
+                    },
+                    "stage": {
+                        "type": "string",
+                        "enum": [
+                            "New",
+                            "Qualified",
+                            "Meeting Booked",
+                            "Proposal Sent",
+                            "Won",
+                            "Lost"
+                        ]
+                    },
+                    "leadScore": {
+                        "type": "number"
+                    },
+                    "decisionMakerKnown": {
+                        "type": "boolean"
+                    },
+                    "nextFollowUpDate": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "User": {
+                "type": "object",
+                "properties": {
+                    "_id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "email": {
+                        "type": "string"
+                    },
+                    "phone": {
+                        "type": "string"
+                    },
+                    "role": {
+                        "type": "string",
+                        "enum": [
+                            "admin",
+                            "sales"
+                        ]
+                    },
+                    "isActive": {
+                        "type": "boolean"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "Activity": {
+                "type": "object",
+                "properties": {
+                    "_id": {
+                        "type": "string"
+                    },
+                    "lead": {
+                        "type": "string"
+                    },
+                    "user": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "role": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "call",
+                            "whatsapp",
+                            "email",
+                            "meeting",
+                            "note",
+                            "other"
+                        ]
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "attachmentUrl": {
+                        "type": "string"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "Followup": {
+                "type": "object",
+                "properties": {
+                    "_id": {
+                        "type": "string"
+                    },
+                    "lead": {
+                        "type": "string"
+                    },
+                    "user": {
+                        "type": "string"
+                    },
+                    "dueDate": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "pending",
+                            "completed",
+                            "skipped"
+                        ]
+                    },
+                    "notes": {
+                        "type": "string"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            }
+        }
+    },
+    "paths": {
+        "/": {
+            "get": {
+                "summary": "Server status",
+                "tags": [
+                    "Health"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "API running message"
+                    }
+                }
+            }
+        },
+        "/api/health": {
+            "get": {
+                "summary": "Health check",
+                "tags": [
+                    "Health"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Status OK with timestamp"
+                    }
+                }
+            }
+        },
+        "/api/auth/seed-admin": {
+            "post": {
+                "summary": "Seed default admin account",
+                "tags": [
+                    "Authentication"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "password": {
+                                        "type": "string",
+                                        "default": "admin123"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Admin created or already exists"
+                    }
+                }
+            }
+        },
+        "/api/auth/login": {
+            "post": {
+                "summary": "Login and get JWT token",
+                "tags": [
+                    "Authentication"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "email",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "example": "admin@acs.local"
+                                    },
+                                    "password": {
+                                        "type": "string",
+                                        "example": "admin123"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "JWT token and user info"
+                    },
+                    "400": {
+                        "description": "Email and password required"
+                    },
+                    "401": {
+                        "description": "Invalid credentials"
+                    }
+                }
+            }
+        },
+        "/api/leads/public": {
+            "post": {
+                "summary": "Create a lead (public, no auth)",
+                "tags": [
+                    "Leads"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "leadType",
+                                    "name",
+                                    "phone",
+                                    "area"
+                                ],
+                                "properties": {
+                                    "leadType": {
+                                        "type": "string",
+                                        "enum": [
+                                            "CHS",
+                                            "Hotel",
+                                            "Corporate",
+                                            "Developer",
+                                            "Other"
+                                        ]
+                                    },
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "phone": {
+                                        "type": "string"
+                                    },
+                                    "email": {
+                                        "type": "string"
+                                    },
+                                    "area": {
+                                        "type": "string"
+                                    },
+                                    "locality": {
+                                        "type": "string"
+                                    },
+                                    "propertySizeFlats": {
+                                        "type": "number"
+                                    },
+                                    "parkingType": {
+                                        "type": "string",
+                                        "enum": [
+                                            "open",
+                                            "basement",
+                                            "mixed"
+                                        ]
+                                    },
+                                    "currentEvCount": {
+                                        "type": "number"
+                                    },
+                                    "chargerInterest": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "notes": {
+                                        "type": "string"
+                                    },
+                                    "consent": {
+                                        "type": "boolean"
+                                    },
+                                    "decisionMakerKnown": {
+                                        "type": "boolean"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Lead created with ID"
+                    },
+                    "500": {
+                        "description": "Failed to create lead"
+                    }
+                }
+            }
+        },
+        "/api/leads": {
+            "get": {
+                "summary": "List leads with filters",
+                "tags": [
+                    "Leads"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Search by name, phone, email, area, locality"
+                    },
+                    {
+                        "name": "area",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "leadType",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "stage",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "owner",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "fromDate",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "toDate",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "number",
+                            "default": 50
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of Lead objects"
+                    }
+                }
+            }
+        },
+        "/api/leads/{id}": {
+            "get": {
+                "summary": "Get lead detail with activities and follow-ups",
+                "tags": [
+                    "Leads"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Lead with activities and followups"
+                    },
+                    "404": {
+                        "description": "Lead not found"
+                    }
+                }
+            },
+            "put": {
+                "summary": "Update a lead",
+                "tags": [
+                    "Leads"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Lead"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated lead"
+                    },
+                    "404": {
+                        "description": "Lead not found"
+                    }
+                }
+            },
+            "delete": {
+                "summary": "Delete a lead and related records",
+                "tags": [
+                    "Leads"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Lead and related records deleted"
+                    },
+                    "404": {
+                        "description": "Lead not found"
+                    }
+                }
+            }
+        },
+        "/api/leads/{id}/activities": {
+            "post": {
+                "summary": "Log an activity on a lead",
+                "tags": [
+                    "Activities"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "type",
+                                    "description"
+                                ],
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "call",
+                                            "whatsapp",
+                                            "email",
+                                            "meeting",
+                                            "note",
+                                            "other"
+                                        ]
+                                    },
+                                    "description": {
+                                        "type": "string"
+                                    },
+                                    "attachmentUrl": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Activity created"
+                    },
+                    "404": {
+                        "description": "Lead not found"
+                    }
+                }
+            }
+        },
+        "/api/leads/{id}/followups": {
+            "post": {
+                "summary": "Schedule a follow-up for a lead",
+                "tags": [
+                    "Follow-ups"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "dueDate"
+                                ],
+                                "properties": {
+                                    "dueDate": {
+                                        "type": "string",
+                                        "format": "date-time"
+                                    },
+                                    "notes": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Followup created"
+                    },
+                    "404": {
+                        "description": "Lead not found"
+                    }
+                }
+            }
+        },
+        "/api/leads/export/csv/all": {
+            "get": {
+                "summary": "Export all leads as CSV",
+                "tags": [
+                    "Leads"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CSV file download"
+                    }
+                }
+            }
+        },
+        "/api/reports/summary": {
+            "get": {
+                "summary": "Dashboard summary report",
+                "tags": [
+                    "Reports"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Summary with stage counts, conversions, top localities"
+                    }
+                }
+            }
+        },
+        "/api/users": {
+            "get": {
+                "summary": "List all users (admin only)",
+                "tags": [
+                    "Users"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of User objects"
+                    }
+                }
+            },
+            "post": {
+                "summary": "Create a new user (admin only)",
+                "tags": [
+                    "Users"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "name",
+                                    "email",
+                                    "password"
+                                ],
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "email": {
+                                        "type": "string"
+                                    },
+                                    "password": {
+                                        "type": "string"
+                                    },
+                                    "phone": {
+                                        "type": "string"
+                                    },
+                                    "role": {
+                                        "type": "string",
+                                        "enum": [
+                                            "admin",
+                                            "sales"
+                                        ],
+                                        "default": "sales"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "User created"
+                    },
+                    "400": {
+                        "description": "Missing required fields"
+                    },
+                    "409": {
+                        "description": "Email already exists"
+                    }
+                }
+            }
+        },
+        "/api/users/{id}": {
+            "delete": {
+                "summary": "Delete a user (admin only)",
+                "tags": [
+                    "Users"
+                ],
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User removed"
+                    },
+                    "400": {
+                        "description": "Cannot delete self or last admin"
+                    },
+                    "404": {
+                        "description": "User not found"
+                    }
+                }
+            }
+        }
+    }
+}

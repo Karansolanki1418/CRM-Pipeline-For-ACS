@@ -9,6 +9,7 @@ const activitySchema = new mongoose.Schema(
       enum: ["call", "whatsapp", "email", "meeting", "note", "other"],
       required: true,
     },
+    subject: { type: String },
     description: { type: String, required: true },
     attachmentUrl: { type: String },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

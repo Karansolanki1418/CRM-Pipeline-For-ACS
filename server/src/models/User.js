@@ -13,6 +13,9 @@ const userSchema = new mongoose.Schema(
       default: "sales",
     },
     isActive: { type: Boolean, default: true },
+    salesTarget: { type: Number, default: 0 },
+    salesAchieved: { type: Number, default: 0 },
+    incentiveEligible: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -2,11 +2,11 @@ import express from "express";
 import Lead from "../models/Lead.js";
 import Activity from "../models/Activity.js";
 import Followup from "../models/Followup.js";
+import User from "../models/User.js";
 import computeLeadScore from "../utils/leadScoring.js";
 import { authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
-
 
 router.post("/public", async (req, res) => {
   try {
@@ -16,7 +16,6 @@ router.post("/public", async (req, res) => {
       : data.chargerInterest
         ? [data.chargerInterest]
         : [];
-
 
     let duplicateOf = null;
     if (data.phone || data.email) {
@@ -46,6 +45,7 @@ router.post("/public", async (req, res) => {
       consent: !!data.consent,
       decisionMakerKnown: !!data.decisionMakerKnown,
       duplicateOf,
+      owner: data.owner || undefined,
     });
 
     lead.leadScore = computeLeadScore(lead);
@@ -66,9 +66,7 @@ router.post("/public", async (req, res) => {
   }
 });
 
-
 router.use(authMiddleware);
-
 
 router.get("/", async (req, res) => {
   const {
@@ -103,22 +101,20 @@ router.get("/", async (req, res) => {
   }
 
   const leads = await Lead.find(filter)
+    .populate("owner", "name email")
     .sort({ createdAt: -1 })
     .limit(Number(limit));
 
   res.json(leads);
 });
 
-
 router.get("/:id", async (req, res) => {
-  const lead = await Lead.findById(req.params.id);
+  const lead = await Lead.findById(req.params.id).populate("owner", "name email");
   if (!lead) return res.status(404).json({ message: "Lead not found" });
 
   const activities = await Activity.find({ lead: lead._id })
     .populate("user", "name role")
-    .sort({
-      createdAt: -1,
-    });
+    .sort({ createdAt: -1 });
   const followups = await Followup.find({ lead: lead._id }).sort({
     dueDate: 1,
   });
@@ -126,18 +122,37 @@ router.get("/:id", async (req, res) => {
   res.json({ lead, activities, followups });
 });
 
+async function updateSalesAchieved(userId) {
+  if (!userId) return;
+  const wonCount = await Lead.countDocuments({ owner: userId, stage: "Won" });
+  const user = await User.findById(userId);
+  if (user) {
+    user.salesAchieved = wonCount;
+    user.incentiveEligible = user.salesTarget > 0 && wonCount >= user.salesTarget;
+    await user.save();
+  }
+}
 
 router.put("/:id", async (req, res) => {
   const updates = { ...req.body, updatedBy: req.user.id };
   const lead = await Lead.findById(req.params.id);
   if (!lead) return res.status(404).json({ message: "Lead not found" });
 
+  const oldStage = lead.stage;
+  const oldOwner = lead.owner;
   Object.assign(lead, updates);
   lead.leadScore = computeLeadScore(lead);
   await lead.save();
+
+  if (oldStage !== lead.stage || (oldOwner && oldOwner.toString() !== (lead.owner || "").toString())) {
+    await updateSalesAchieved(lead.owner);
+    if (oldOwner && oldOwner.toString() !== (lead.owner || "").toString()) {
+      await updateSalesAchieved(oldOwner);
+    }
+  }
+
   res.json(lead);
 });
-
 
 router.post("/:id/activities", async (req, res) => {
   const lead = await Lead.findById(req.params.id);
@@ -147,6 +162,7 @@ router.post("/:id/activities", async (req, res) => {
     lead: lead._id,
     user: req.user.id,
     type: req.body.type,
+    subject: req.body.subject || "",
     description: req.body.description,
     attachmentUrl: req.body.attachmentUrl,
     createdBy: req.user.id,
@@ -154,7 +170,6 @@ router.post("/:id/activities", async (req, res) => {
 
   res.status(201).json(activity);
 });
-
 
 router.post("/:id/followups", async (req, res) => {
   const lead = await Lead.findById(req.params.id);
@@ -175,18 +190,21 @@ router.post("/:id/followups", async (req, res) => {
   res.status(201).json(followup);
 });
 
-
 router.delete("/:id", async (req, res) => {
   const lead = await Lead.findById(req.params.id);
   if (!lead) return res.status(404).json({ message: "Lead not found" });
 
+  const ownerId = lead.owner;
   await Activity.deleteMany({ lead: lead._id });
   await Followup.deleteMany({ lead: lead._id });
   await lead.deleteOne();
 
+  if (ownerId) {
+    await updateSalesAchieved(ownerId);
+  }
+
   res.json({ message: "Lead and related records deleted" });
 });
-
 
 router.get("/export/csv/all", async (req, res) => {
   const leads = await Lead.find({});
@@ -230,4 +248,3 @@ router.get("/export/csv/all", async (req, res) => {
 });
 
 export default router;
-
