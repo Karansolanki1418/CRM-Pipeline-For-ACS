@@ -138,28 +138,27 @@ function PublicLeadForm({ onSubmitted }) {
 }
 
 function LoginScreen({ onLoggedIn }) {
-  const [email, setEmail] = useState('admin@acs.local');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const seedAndLogin = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setLoading(true); setError('');
     try {
-      await apiFetch('/auth/seed-admin', { method: 'POST', body: { password } });
       const res = await apiFetch('/auth/login', { method: 'POST', body: { email, password } });
       onLoggedIn(res);
-    } catch (err) { console.error(err); setError('Login failed. Is the backend running?'); } finally { setLoading(false); }
+    } catch (err) { console.error(err); setError('Login failed. Check your credentials or backend.'); } finally { setLoading(false); }
   };
-  const handleSubmit = async (e) => { e.preventDefault(); await seedAndLogin(); };
   return (
     <div className="ev-login-screen">
       <div className="ev-login-card"><div className="ev-login-inner">
         <div className="ev-logo" style={{ marginBottom: 14 }}><div className="ev-logo-mark"><div className="ev-logo-icon" /></div><div><div className="ev-logo-text-main">ACS Energy</div><div className="ev-logo-text-sub">Lead cockpit for EV rollouts</div></div></div>
         <div className="ev-login-title">Sign in to ACS pipeline</div>
         <div className="ev-login-sub">One place to see every CHS, hotel, corporate park and developer in motion.</div>
-        <form onSubmit={handleSubmit}>
-          <div className="ev-field"><div className="ev-label-row"><span className="ev-label">Work email</span></div><input className="ev-input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@acs.in" /></div>
-          <div className="ev-field" style={{ marginTop: 8 }}><div className="ev-label-row"><span className="ev-label">Password</span></div><input className="ev-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" /></div>
+        <form onSubmit={handleSubmit} autoComplete="off">
+          <div className="ev-field"><div className="ev-label-row"><span className="ev-label">Work email</span></div><input className="ev-input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@acs.in" autoComplete="off" /></div>
+          <div className="ev-field" style={{ marginTop: 8 }}><div className="ev-label-row"><span className="ev-label">Password</span></div><input className="ev-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" /></div>
           {error && <div style={{ color: '#fecaca', fontSize: 12, marginTop: 6 }}>{error}</div>}
           <button type="submit" className="ev-primary-btn" style={{ width: '100%', marginTop: 14 }} disabled={loading}>{loading ? 'Connecting…' : 'Login to dashboard'}</button>
         </form>
