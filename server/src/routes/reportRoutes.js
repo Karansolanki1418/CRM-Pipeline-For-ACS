@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import Lead from "../models/Lead.js";
 import { authMiddleware } from "../middleware/auth.js";
 
@@ -16,7 +17,7 @@ router.get("/summary", async (req, res) => {
 
     const matchBase = {};
     if (req.user.role === "sales") {
-      matchBase.owner = req.user.id;
+      matchBase.owner = new mongoose.Types.ObjectId(req.user.id);
     }
 
     const newLeadsThisWeek = await Lead.countDocuments({

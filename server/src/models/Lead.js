@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const leadSchema = new mongoose.Schema(
   {
-    leadId: { type: String, unique: true },
+    leadId: { type: String, unique: true, sparse: true },
     leadType: {
       type: String,
       enum: ["CHS", "Hotel", "Corporate", "Developer", "Other"],

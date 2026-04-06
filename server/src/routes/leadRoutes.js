@@ -4,45 +4,11 @@ import Activity from "../models/Activity.js";
 import Followup from "../models/Followup.js";
 import User from "../models/User.js";
 import computeLeadScore from "../utils/leadScoring.js";
-import { authMiddleware } from "../middleware/auth.js";
+import { authMiddleware, requireRole } from "../middleware/auth.js";
+import { suggestAssignee, refreshUserPerformance } from "../services/assignmentService.js";
+import mongoose from "mongoose";
 
 const router = express.Router();
-
-async function smartAssignOwner() {
-  const salesUsers = await User.find({ role: "sales", isActive: true });
-  if (!salesUsers.length) return undefined;
-  const counts = await Promise.all(
-    salesUsers.map(async (u) => ({
-      user: u._id,
-      active: await Lead.countDocuments({
-        owner: u._id,
-        stage: { $nin: ["Won", "Lost"] },
-      }),
-    }))
-  );
-  const minCount = Math.min(...counts.map((c) => c.active));
-  const candidates = counts.filter((c) => c.active === minCount);
-  if (candidates.length === 1) return candidates[0].user;
-  const speeds = await Promise.all(
-    candidates.map(async (c) => {
-      const closed = await Lead.find(
-        { owner: c.user, stage: { $in: ["Won", "Lost"] } },
-        "createdAt updatedAt"
-      );
-      const avg =
-        closed.length > 0
-          ? closed.reduce(
-            (s, l) =>
-              s + (new Date(l.updatedAt) - new Date(l.createdAt)),
-            0
-          ) / closed.length
-          : Infinity;
-      return { user: c.user, avg };
-    })
-  );
-  speeds.sort((a, b) => a.avg - b.avg);
-  return speeds[0].user;
-}
 
 function checkLeadAccess(req, lead) {
   if (req.user.role === "admin") return true;
@@ -72,9 +38,28 @@ router.post("/public", async (req, res) => {
       }
     }
 
-    const assignedOwner = await smartAssignOwner();
+    // Use manual owner if provided, otherwise auto-assign
+    let assignedOwner;
+    if (data.owner) {
+      // Manual override — validate that the user exists and is a salesperson
+      const manualUser = await User.findById(data.owner);
+      if (manualUser && manualUser.role === "sales" && manualUser.isActive) {
+        assignedOwner = manualUser._id;
+      } else {
+        // Fallback to auto-assign if invalid manual selection
+        const result = await suggestAssignee();
+        assignedOwner = result.suggested?.userId || undefined;
+      }
+    } else {
+      const result = await suggestAssignee();
+      assignedOwner = result.suggested?.userId || undefined;
+    }
 
+    const leadObjectId = new mongoose.Types.ObjectId();
+    const nowTs = Date.now();
     const lead = new Lead({
+      _id: leadObjectId,
+      leadId: `ACS-${String(nowTs).slice(-6)}-${leadObjectId.toString().slice(-4)}`,
       leadType: data.leadType,
       name: data.name,
       phone: data.phone,
@@ -93,10 +78,6 @@ router.post("/public", async (req, res) => {
     });
 
     lead.leadScore = computeLeadScore(lead);
-    await lead.save();
-    lead.leadId = `ACS-${String(lead.createdAt.getTime()).slice(-6)}-${lead._id
-      .toString()
-      .slice(-4)}`;
     await lead.save();
 
     const ownerUser = assignedOwner
@@ -117,6 +98,61 @@ router.post("/public", async (req, res) => {
 
 router.use(authMiddleware);
 
+/* ─── Admin: get suggested assignee + candidate list ─── */
+router.get("/suggest-assignee", requireRole(["admin"]), async (req, res) => {
+  try {
+    const result = await suggestAssignee();
+    res.json(result);
+  } catch (err) {
+    console.error("suggest-assignee error:", err);
+    res.status(500).json({ message: "Failed to compute assignment suggestion" });
+  }
+});
+
+/* ─── Admin: reassign a lead to a different salesperson ─── */
+router.put("/:id/reassign", requireRole(["admin"]), async (req, res) => {
+  try {
+    const { newOwner } = req.body;
+    if (!newOwner) {
+      return res.status(400).json({ message: "newOwner is required" });
+    }
+    const targetUser = await User.findById(newOwner);
+    if (!targetUser || targetUser.role !== "sales" || !targetUser.isActive) {
+      return res.status(400).json({ message: "Invalid sales user" });
+    }
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+    const oldOwner = lead.owner;
+    const oldOwnerUser = oldOwner ? await User.findById(oldOwner, "name") : null;
+
+    lead.owner = targetUser._id;
+    lead.updatedBy = req.user.id;
+    await lead.save();
+
+    // Log the reassignment as an activity
+    await Activity.create({
+      lead: lead._id,
+      user: req.user.id,
+      type: "note",
+      subject: `Reassigned: ${oldOwnerUser?.name || "Unassigned"} → ${targetUser.name}`,
+      description: `Lead reassigned from ${oldOwnerUser?.name || "unassigned"} to ${targetUser.name} by admin`,
+      createdBy: req.user.id,
+    });
+
+    // Refresh performance metrics for both old and new owners
+    if (oldOwner) await refreshUserPerformance(oldOwner);
+    await refreshUserPerformance(targetUser._id);
+
+    res.json({
+      message: "Lead reassigned",
+      lead: { _id: lead._id, owner: { _id: targetUser._id, name: targetUser.name } },
+    });
+  } catch (err) {
+    console.error("reassign error:", err);
+    res.status(500).json({ message: "Failed to reassign lead" });
+  }
+});
 router.get("/", async (req, res) => {
   const {
     q,
@@ -246,6 +282,8 @@ async function updateSalesAchieved(userId) {
       user.salesTarget > 0 && wonCount >= user.salesTarget;
     await user.save();
   }
+  // Also refresh composite performance metrics
+  await refreshUserPerformance(userId);
 }
 
 router.put("/:id", async (req, res) => {

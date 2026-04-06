@@ -16,6 +16,9 @@ const userSchema = new mongoose.Schema(
     salesTarget: { type: Number, default: 0 },
     salesAchieved: { type: Number, default: 0 },
     incentiveEligible: { type: Boolean, default: false },
+    avgCompletionMs: { type: Number, default: 0 },
+    closedLeadCount: { type: Number, default: 0 },
+    performanceScore: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

@@ -53,7 +53,7 @@ function Toast({ message, meta }) {
   );
 }
 
-function PublicLeadForm({ onSubmitted }) {
+function PublicLeadForm({ onSubmitted, token, isAdmin }) {
   const [form, setForm] = useState({
     leadType: 'CHS', name: '', phone: '', email: '', area: '', locality: '',
     propertySizeFlats: '', parkingType: 'basement', currentEvCount: '',
@@ -62,6 +62,22 @@ function PublicLeadForm({ onSubmitted }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [lastResult, setLastResult] = useState(null);
+  // Assignment state (admin only)
+  const [candidates, setCandidates] = useState([]);
+  const [suggestedId, setSuggestedId] = useState('');
+  const [selectedOwner, setSelectedOwner] = useState('auto');
+
+  // Fetch suggested assignee when admin opens the form
+  useEffect(() => {
+    if (!isAdmin || !token) return;
+    (async () => {
+      try {
+        const data = await apiFetch('/leads/suggest-assignee', { token });
+        setCandidates(data.candidates || []);
+        if (data.suggested) setSuggestedId(data.suggested.userId);
+      } catch (e) { console.error('suggest-assignee error:', e); }
+    })();
+  }, [isAdmin, token]);
 
   const toggleCharger = (value) => {
     setForm((prev) => {
@@ -79,12 +95,18 @@ function PublicLeadForm({ onSubmitted }) {
     setError(''); setSubmitting(true);
     try {
       const payload = { ...form, propertySizeFlats: form.propertySizeFlats ? Number(form.propertySizeFlats) : undefined, currentEvCount: form.currentEvCount ? Number(form.currentEvCount) : undefined };
+      // If admin selected a manual owner, include it
+      if (isAdmin && selectedOwner !== 'auto') payload.owner = selectedOwner;
       const res = await apiFetch('/leads/public', { method: 'POST', body: payload, publicRoute: true });
       onSubmitted?.(res.leadId);
       setLastResult(res);
       setForm((prev) => ({ ...prev, name: '', phone: '', email: '', locality: '', propertySizeFlats: '', currentEvCount: '', notes: '', decisionMakerKnown: false }));
+      setSelectedOwner('auto');
     } catch (err) { console.error(err); onSubmitted?.(null, err); } finally { setSubmitting(false); }
   };
+
+  const suggestedCandidate = candidates.find(c => c.userId === suggestedId);
+
   return (
     <div className="ev-panel">
       <div className="ev-panel-header">
@@ -126,8 +148,22 @@ function PublicLeadForm({ onSubmitted }) {
             <textarea name="notes" value={form.notes} onChange={handleChange} className="ev-textarea" placeholder="Capture context for ACS sales team…" /></div>
           <div className="ev-checkbox-row"><input type="checkbox" name="consent" checked={form.consent} onChange={handleChange} /><span>I have consent to be contacted by ACS on phone/WhatsApp/email regarding EV charging.</span></div>
         </div>
+        {/* ─── Admin assignment selector ─── */}
+        {isAdmin && candidates.length > 0 && (
+          <div className="ev-field" style={{ marginTop: 12 }}>
+            <div className="ev-label-row"><span className="ev-label">⚡ Assign to</span><span className="ev-hint">Auto-suggestion based on workload + performance</span></div>
+            <select className="ev-select" value={selectedOwner} onChange={(e) => setSelectedOwner(e.target.value)} style={{ marginTop: 4 }}>
+              <option value="auto">⚡ Auto: {suggestedCandidate ? `${suggestedCandidate.name} (${suggestedCandidate.activeLeads} active, score ${suggestedCandidate.performanceScore.toFixed(2)})` : 'Best available'}</option>
+              {candidates.map((c) => (
+                <option key={c.userId} value={c.userId}>
+                  {c.name} — {c.activeLeads} active leads, {c.closedCount} closed, score {c.performanceScore.toFixed(2)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span className="ev-pill-small">Auto-assigned to available salesperson</span>
+          <span className="ev-pill-small">{isAdmin && selectedOwner !== 'auto' ? '🔧 Manual assignment' : '⚡ Auto-assigned to best salesperson'}</span>
           <button className="ev-primary-btn" type="submit" disabled={submitting}><span>{submitting ? 'Saving lead…' : 'Create Lead'}</span></button>
         </div>
         {error && <div style={{ marginTop: 8, fontSize: 12, color: '#fecaca' }}>{error}</div>}
@@ -268,8 +304,63 @@ function LeadList({ leads, onSelect, users, token, showFilters }) {
     </div>
   );
 }
+function ReassignDropdown({ leadId, currentOwner, token, onReassigned }) {
+  const [open, setOpen] = useState(false);
+  const [candidates, setCandidates] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
 
-function LeadDetail({ lead, details, onAddActivity, onCancel }) {
+  const handleOpen = async () => {
+    if (open) { setOpen(false); return; }
+    setLoading(true); setOpen(true);
+    try {
+      const data = await apiFetch('/leads/suggest-assignee', { token });
+      setCandidates(data.candidates || []);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
+  };
+
+  const handleReassign = async (newOwnerId) => {
+    setReassigning(true);
+    try {
+      await apiFetch(`/leads/${leadId}/reassign`, { method: 'PUT', token, body: { newOwner: newOwnerId } });
+      onReassigned?.();
+      setOpen(false);
+    } catch (e) { console.error(e); } finally { setReassigning(false); }
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button type="button" className="ev-tag ev-tag-button" onClick={handleOpen} style={{ fontSize: '0.65rem' }}>
+        🔄 Reassign
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 20, background: 'rgba(15,23,42,0.97)', border: '1px solid rgba(56,189,248,0.2)', borderRadius: 8, padding: '0.5rem', minWidth: 260, marginTop: 4, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+          <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', marginBottom: 6 }}>Reassign to:</div>
+          {loading && <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Loading candidates…</div>}
+          {!loading && candidates.map((c) => {
+            const isCurrent = currentOwner && (currentOwner._id === c.userId || currentOwner === c.userId);
+            return (
+              <button key={c.userId} type="button" disabled={reassigning || isCurrent}
+                onClick={() => handleReassign(c.userId)}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.4rem 0.5rem', fontSize: '0.72rem', color: isCurrent ? '#475569' : '#e2e8f0', background: isCurrent ? 'rgba(51,65,85,0.3)' : 'transparent', border: 'none', borderRadius: 4, cursor: isCurrent ? 'default' : 'pointer', marginBottom: 2, transition: 'background 0.15s' }}
+                onMouseEnter={(e) => { if (!isCurrent) e.target.style.background = 'rgba(56,189,248,0.1)'; }}
+                onMouseLeave={(e) => { if (!isCurrent) e.target.style.background = 'transparent'; }}
+              >
+                <span style={{ fontWeight: 600 }}>{c.name}</span>{isCurrent ? ' (current)' : ''}
+                <span style={{ display: 'block', fontSize: '0.62rem', color: '#64748b' }}>
+                  {c.activeLeads} active · {c.closedCount} closed · score {c.performanceScore.toFixed(2)}
+                </span>
+              </button>
+            );
+          })}
+          {!loading && candidates.length === 0 && <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>No sales members available.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LeadDetail({ lead, details, onAddActivity, onCancel, isAdmin, token, onReassigned }) {
   const [updatingStage, setUpdatingStage] = useState(false);
   const [stage, setStage] = useState(lead?.stage || 'New');
   const [meetingDate, setMeetingDate] = useState('');
@@ -309,6 +400,7 @@ function LeadDetail({ lead, details, onAddActivity, onCancel }) {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           {whatsappHref && <a href={whatsappHref} target="_blank" rel="noreferrer" className="ev-whatsapp-link"><span className="ev-whatsapp-bubble">WA</span><span>Click-to-chat</span></a>}
           <span className="ev-tag">Current: {lead.stage || 'New'}</span>
+          {isAdmin && <ReassignDropdown leadId={lead._id} currentOwner={lead.owner} token={token} onReassigned={onReassigned} />}
         </div>
       </div>
       <div className="ev-lead-detail-layout">
@@ -619,8 +711,8 @@ function AdminDashboard({ auth }) {
     <div className="ev-layout">
       <AppShell user={auth.user} onLogout={auth.logout} view={view} setView={setView} />
       <main className="ev-main">
-        {view === 'capture' && <div style={{ width: '100%' }}><PublicLeadForm onSubmitted={handleLeadSubmitted} /></div>}
-        {view === 'pipeline' && <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 16 }}><KanbanBoard leads={leads} onSelect={openLead} /><LeadDetail lead={selectedLead} details={selectedDetails} onAddActivity={handleAddActivity} onCancel={handleCancelLead} /></div>}
+        {view === 'capture' && <div style={{ width: '100%' }}><PublicLeadForm onSubmitted={handleLeadSubmitted} token={auth.token} isAdmin /></div>}
+        {view === 'pipeline' && <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 16 }}><KanbanBoard leads={leads} onSelect={openLead} /><LeadDetail lead={selectedLead} details={selectedDetails} onAddActivity={handleAddActivity} onCancel={handleCancelLead} isAdmin token={auth.token} onReassigned={() => { refreshLeads(); refreshSalesPerf(); }} /></div>}
         {view === 'leadList' && <div style={{ width: '100%' }}><LeadList leads={leads} onSelect={openLead} users={users} token={auth.token} showFilters /></div>}
         {view === 'pipelineHealth' && <div style={{ width: '100%' }}><MetricsPanel metrics={metrics} /></div>}
         {view === 'reports' && <div style={{ width: '100%' }}><LeadDetail lead={selectedLead} details={selectedDetails} onAddActivity={handleAddActivity} onCancel={handleCancelLead} /></div>}
